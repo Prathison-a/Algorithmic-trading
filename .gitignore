@@ -1,0 +1,8 @@
+v3-venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.vscode/
+v1-env
+.vscode/

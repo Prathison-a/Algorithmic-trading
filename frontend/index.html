@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trading Forecast Terminal</title>
+    <script src="/static/lightweight-charts.js"></script>
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        /* RSI / Volume Delta panel layout - kept inline so it works regardless of style.css */
+        .charts-wrapper {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            min-height: 0;
+        }
+
+        .chart-container-box {
+            flex: 3;
+            min-height: 0;
+        }
+
+        .rsi-container-box {
+            flex: 1;
+            min-height: 120px;
+            border-top: 1px solid #2b2b36;
+        }
+
+        .volume-delta-container-box {
+            flex: 1;
+            min-height: 120px;
+            border-top: 1px solid #2b2b36;
+        }
+
+        .macd-container-box,
+        .stochastic-container-box,
+        .mfi-container-box,
+        .adx-container-box,
+        .obv-container-box {
+            flex: 1;
+            min-height: 120px;
+            border-top: 1px solid #2b2b36;
+        }
+
+        /* ---- Top-right action buttons (small) ---- */
+        .control-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 12px;
+            width: 100%;
+        }
+
+        .top-actions {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-shrink: 0;
+            flex-wrap: wrap;
+        }
+
+        .btn-sm {
+            padding: 4px 10px;
+            font-size: 12px;
+            line-height: 1.4;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        /* ---- Chart display toggles (Candles / Prediction Line) ---- */
+        .display-toggle-row {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 10px;
+            width: 100%;
+            padding: 6px 0;
+        }
+
+        /* ---- Available Indicators panel (plain checkboxes, dark theme) ---- */
+        .indicators-panel {
+            width: 100%;
+            padding: 10px 0 6px 0;
+        }
+
+        .indicators-panel-title {
+            font-size: 12px;
+            font-weight: 600;
+            letter-spacing: 0.03em;
+            text-transform: uppercase;
+            color: #9a9aa5;
+            border-bottom: 1px solid #2b2b36;
+            padding-bottom: 6px;
+            margin-bottom: 8px;
+        }
+
+        .indicator-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px 16px;
+        }
+
+        .indicator-item {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            min-width: 110px;
+        }
+
+        .indicator-item input[type="checkbox"] {
+            width: 15px;
+            height: 15px;
+            margin: 0;
+            accent-color: #4f8cff;
+            cursor: pointer;
+            flex-shrink: 0;
+            /* Explicitly a standard checkbox - no custom slider/toggle appearance */
+            appearance: auto;
+            -webkit-appearance: checkbox;
+        }
+
+        .indicator-item input[type="checkbox"]:focus-visible {
+            outline: 2px solid #4f8cff;
+            outline-offset: 2px;
+        }
+
+        .indicator-item label {
+            font-size: 12px;
+            color: #d7d7de;
+            user-select: none;
+            cursor: pointer;
+        }
+
+        /* Reuse existing toggle-group styles for the two chart-display checkboxes */
+        .toggle-group {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .toggle-label {
+            font-size: 12px;
+            color: #d7d7de;
+            user-select: none;
+        }
+
+        .toggle-group input[type="checkbox"] {
+            width: 15px;
+            height: 15px;
+            accent-color: #4f8cff;
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+
+        .toggle-group input[type="checkbox"]:focus-visible {
+            outline: 2px solid #4f8cff;
+            outline-offset: 2px;
+        }
+
+        @media (max-width: 600px) {
+            .indicator-item {
+                min-width: 45%;
+            }
+        }
+
+        /* ============================================================
+           Training Indicators - toggle switch + collapsible panel
+           ============================================================ */
+        .switch-group {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            flex-shrink: 0;
+        }
+
+        .switch-group .toggle-label {
+            white-space: nowrap;
+        }
+
+        /* Real sliding toggle switch (distinct from the plain indicator checkboxes) */
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 36px;
+            height: 20px;
+            flex-shrink: 0;
+        }
+
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .switch .slider-toggle {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #3a3a46;
+            border-radius: 20px;
+            transition: background-color 0.25s ease;
+        }
+
+        .switch .slider-toggle::before {
+            position: absolute;
+            content: "";
+            height: 14px;
+            width: 14px;
+            left: 3px;
+            bottom: 3px;
+            background-color: #d7d7de;
+            border-radius: 50%;
+            transition: transform 0.25s ease;
+        }
+
+        .switch input:checked+.slider-toggle {
+            background-color: #4f8cff;
+        }
+
+        .switch input:checked+.slider-toggle::before {
+            transform: translateX(16px);
+        }
+
+        .switch input:focus-visible+.slider-toggle {
+            outline: 2px solid #4f8cff;
+            outline-offset: 2px;
+        }
+
+        /* Collapsible panel - collapsed by default, takes up no space when closed */
+        #trainingIndicatorsPanel,
+        #indicatorsPanel {
+            width: 100%;
+            max-height: 0;
+            opacity: 0;
+            overflow: hidden;
+            padding: 0 0;
+            margin: 0;
+            border-top: 0px solid #2b2b36;
+            transition: max-height 0.25s ease, opacity 0.25s ease, padding 0.25s ease, margin 0.25s ease;
+        }
+
+        #trainingIndicatorsPanel.open,
+        #indicatorsPanel.open {
+            max-height: 300px;
+            opacity: 1;
+            padding: 10px 0 6px 0;
+            margin-top: 4px;
+            border-top: 1px solid #2b2b36;
+        }
+
+        @media (max-width: 600px) {
+            .control-header {
+                flex-wrap: wrap;
+            }
+
+            .top-actions {
+                flex-wrap: wrap;
+            }
+        }
+
+        /* ============================================================
+           Second-row navigation: Chart Analysis 1 / 2 / 3 tabs
+           Styled to match the existing dark dashboard theme.
+           ============================================================ */
+        .chart-analysis-nav {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 3px;
+            border: 1px solid #2b2b36;
+            border-radius: 8px;
+            background-color: rgba(255, 255, 255, 0.02);
+            flex-wrap: wrap;
+            flex-shrink: 0;
+        }
+
+        .chart-analysis-tab {
+            appearance: none;
+            -webkit-appearance: none;
+            background-color: transparent;
+            border: 1px solid transparent;
+            color: #9a9aa5;
+            font-size: 12px;
+            font-weight: 600;
+            letter-spacing: 0.01em;
+            padding: 5px 12px;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease;
+            line-height: 1.4;
+            white-space: nowrap;
+        }
+
+        .chart-analysis-tab:hover {
+            color: #d7d7de;
+            background-color: rgba(79, 140, 255, 0.08);
+            border-color: #3a3a46;
+        }
+
+        .chart-analysis-tab:focus-visible {
+            outline: 2px solid #4f8cff;
+            outline-offset: 2px;
+        }
+
+        .chart-analysis-tab.active {
+            color: #ffffff;
+            background-color: #4f8cff;
+            border-color: #4f8cff;
+        }
+
+        .chart-analysis-panel {
+            display: none;
+            flex-direction: column;
+            flex: 1;
+            min-height: 0;
+        }
+
+        .chart-analysis-panel.active {
+            display: flex;
+        }
+
+        /* Placeholder styling for the new (currently empty) analysis panels */
+        .chart-analysis-placeholder {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex: 1;
+            min-height: 200px;
+            color: #6f6f7a;
+            font-size: 13px;
+            text-align: center;
+            padding: 24px;
+        }
+
+        @media (max-width: 600px) {
+            .chart-analysis-nav {
+                width: 100%;
+                justify-content: center;
+                order: 10;
+            }
+
+            .chart-analysis-tab {
+                flex: 1 1 auto;
+                text-align: center;
+                padding: 6px 6px;
+                font-size: 11px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="app-container">
+        <div class="control-panel">
+            <div class="control-header">
+                <div class="control-row">
+                    <div class="input-group">
+                        <label>Ticker</label>
+                        <select id="tickerSelect"></select>
+                    </div>
+
+                    <div class="input-group">
+                        <label>Data Source</label>
+                        <select id="dataSourceSelect"
+                            onchange="document.getElementById('dataPathGroup').style.display = this.value === 'local' ? 'block' : 'none'">
+                            <option value="ftp">FTP OHLCV</option>
+                            <option value="local">Local Options Data</option>
+                        </select>
+                    </div>
+
+                    <div class="input-group" id="dataPathGroup" style="display: none;">
+                        <label>Local Path</label>
+                        <input type="text" id="dataPathInput"
+                            value="C:\Users\KF0158\Desktop\OptionsDataAllDteSPY.jsonlines" style="width: 200px;">
+                    </div>
+
+                    <div class="input-group">
+                        <label>Model</label>
+                        <select id="modelSelect"></select>
+                    </div>
+
+                    <div class="input-group">
+                        <label>Timeframe (min)</label>
+                        <select id="timeframeSelect">
+                            <option value="1">1</option>
+                            <option value="5">5</option>
+                            <option value="10">10</option>
+                            <option value="15">15</option>
+                            <option value="30">30</option>
+                            <option value="60">60</option>
+                        </select>
+                    </div>
+
+                    <div class="input-group">
+                        <label>Forecast</label>
+                        <select id="forecastSelect">
+                            <option value="1">1</option>
+                            <option value="5">5</option>
+                            <option value="10">10</option>
+                            <option value="15" selected>15</option>
+                            <option value="30">30</option>
+                            <option value="60">60</option>
+                        </select>
+                    </div>
+
+                    <div class="input-group">
+                        <label>History</label>
+                        <select id="historySelect">
+                            <option value="100">100</option>
+                            <option value="250">250</option>
+                            <option value="500" selected>500</option>
+                            <option value="1000">1000</option>
+                            <option value="All">All</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="top-actions">
+                    <div class="switch-group">
+                        <label class="switch">
+                            <input type="checkbox" id="chkTrainingIndicatorsToggle"
+                                aria-controls="trainingIndicatorsPanel">
+                            <span class="slider-toggle"></span>
+                        </label>
+                        <label class="toggle-label" for="chkTrainingIndicatorsToggle">Training Indicators</label>
+                    </div>
+
+                    <div class="switch-group">
+                        <label class="switch">
+                            <input type="checkbox" id="chkIndicatorsToggle" aria-controls="indicatorsPanel" checked>
+                            <span class="slider-toggle"></span>
+                        </label>
+                        <label class="toggle-label" for="chkIndicatorsToggle">Indicators</label>
+                    </div>
+
+                    <!-- Chart Analysis 1 / 2 / 3 tabs - placed next to Training Indicators -->
+                    <div class="chart-analysis-nav" role="tablist" aria-label="Chart Analysis Views">
+                        <button type="button" class="chart-analysis-tab" data-target="chartAnalysis0" role="tab"
+                            aria-selected="false" id="tabChartAnalysis0">Chart Analysis 0</button>
+                        <button type="button" class="chart-analysis-tab active" data-target="chartAnalysis1" role="tab"
+                            aria-selected="true" id="tabChartAnalysis1">Chart Analysis 1</button>
+                        <button type="button" class="chart-analysis-tab" data-target="chartAnalysis2" role="tab"
+                            aria-selected="false" id="tabChartAnalysis2">Chart Analysis 2</button>
+                        <button type="button" class="chart-analysis-tab" data-target="chartAnalysis3" role="tab"
+                            aria-selected="false" id="tabChartAnalysis3">Chart Analysis 3</button>
+                    </div>
+
+                    <button id="btnRun" class="primary-btn btn-sm">Run Inference</button>
+                    <button id="btnRetrain" class="secondary-btn btn-sm">Retrain Model</button>
+                </div>
+            </div>
+
+            <!-- Training Indicators panel - collapsed (OFF) by default, no reserved space -->
+            <div class="indicators-panel" id="trainingIndicatorsPanel">
+                <div class="indicators-panel-title">Training Indicators</div>
+                <div class="indicator-grid">
+                    <div class="indicator-item">
+                        <input type="checkbox" id="tiEma9" data-indicator="EMA9" checked>
+                        <label for="tiEma9">EMA 9</label>
+                    </div>
+                    <div class="indicator-item">
+                        <input type="checkbox" id="tiEma20" data-indicator="EMA20" checked>
+                        <label for="tiEma20">EMA 20</label>
+                    </div>
+                    <div class="indicator-item">
+                        <input type="checkbox" id="tiVwap" data-indicator="VWAP" checked>
+                        <label for="tiVwap">VWAP</label>
+                    </div>
+                    <div class="indicator-item">
+                        <input type="checkbox" id="tiRsi" data-indicator="RSI" checked>
+                        <label for="tiRsi">RSI</label>
+                    </div>
+                    <div class="indicator-item">
+                        <input type="checkbox" id="tiStochastic" data-indicator="Stochastic">
+                        <label for="tiStochastic">Stochastic</label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Chart display toggles (not model indicators - controls what's drawn on the price chart) -->
+            <div class="display-toggle-row">
+                <div class="toggle-group">
+                    <input type="checkbox" id="chkCandles" checked>
+                    <label class="toggle-label" for="chkCandles">Candles</label>
+                </div>
+
+                <div class="toggle-group">
+                    <input type="checkbox" id="chkPrediction" checked>
+                    <label class="toggle-label" for="chkPrediction">Prediction Line</label>
+                </div>
+            </div>
+
+            <!-- Available Indicators - collapsible panel controlled by chkIndicatorsToggle
+                 Restricted to exactly 11 indicators: EMA9, EMA20, EMA50, VWAP, RSI14, MACD,
+                 ATR14, Stochastic RSI, OBV, Bollinger Bands, ADX -->
+            <div class="indicators-panel open" id="indicatorsPanel">
+                <div class="indicators-panel-title">Indicators</div>
+                <div class="indicator-grid" id="indicatorGrid">
+                    <div class="indicator-item">
+                        <input type="checkbox" id="chkEma9" data-indicator="EMA9" checked>
+                        <label for="chkEma9">EMA 9</label>
+                    </div>
+                    <div class="indicator-item">
+                        <input type="checkbox" id="chkEma20" data-indicator="EMA20" checked>
+                        <label for="chkEma20">EMA 20</label>
+                    </div>
+                    <div class="indicator-item">
+                        <input type="checkbox" id="chkEma50" data-indicator="EMA50">
+                        <label for="chkEma50">EMA 50</label>
+                    </div>
+                    <div class="indicator-item">
+                        <input type="checkbox" id="chkVwap" data-indicator="VWAP" checked>
+                        <label for="chkVwap">VWAP</label>
+                    </div>
+                    <div class="indicator-item">
+                        <input type="checkbox" id="chkRsi" data-indicator="RSI" checked>
+                        <label for="chkRsi">RSI</label>
+                    </div>
+                    <div class="indicator-item">
+                        <input type="checkbox" id="chkMacd" data-indicator="MACD" checked>
+                        <label for="chkMacd">MACD</label>
+                    </div>
+                    <div class="indicator-item">
+                        <input type="checkbox" id="chkAtr" data-indicator="ATR" checked>
+                        <label for="chkAtr">ATR</label>
+                    </div>
+                    <div class="indicator-item">
+                        <input type="checkbox" id="chkBollinger" data-indicator="Bollinger">
+                        <label for="chkBollinger">Bollinger Bands</label>
+                    </div>
+                    <div class="indicator-item">
+                        <input type="checkbox" id="chkAdx" data-indicator="ADX">
+                        <label for="chkAdx">ADX</label>
+                    </div>
+                    <div class="indicator-item">
+                        <input type="checkbox" id="chkStochastic" data-indicator="Stochastic">
+                        <label for="chkStochastic">Stochastic RSI</label>
+                    </div>
+                    <div class="indicator-item">
+                        <input type="checkbox" id="chkObv" data-indicator="OBV">
+                        <label for="chkObv">OBV</label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="control-row">
+                <button id="btnStop" class="danger-btn" style="display: none;">Stop Training</button>
+            </div>
+        </div>
+
+        <!-- Chart Analysis 0 -->
+        <div class="chart-analysis-panel" id="chartAnalysis0" role="tabpanel" aria-labelledby="tabChartAnalysis0">
+            <div class="charts-wrapper">
+                <div id="chartContainer0" class="chart-container chart-container-box"></div>
+                <div id="rsiContainer0" class="rsi-container-box"></div>
+                <div id="volumeDeltaContainer0" class="volume-delta-container-box"></div>
+                <div id="macdContainer0" class="macd-container-box"></div>
+                <div id="stochasticContainer0" class="stochastic-container-box"></div>
+                <div id="mfiContainer0" class="mfi-container-box"></div>
+                <div id="adxContainer0" class="adx-container-box"></div>
+                <div id="obvContainer0" class="obv-container-box"></div>
+            </div>
+        </div>
+
+        <!-- Chart Analysis 1 -->
+        <div class="chart-analysis-panel active" id="chartAnalysis1" role="tabpanel"
+            aria-labelledby="tabChartAnalysis1">
+            <div class="charts-wrapper">
+                <div id="chartContainer1" class="chart-container chart-container-box"></div>
+                <div id="rsiContainer1" class="rsi-container-box"></div>
+                <div id="volumeDeltaContainer1" class="volume-delta-container-box"></div>
+                <div id="macdContainer1" class="macd-container-box"></div>
+                <div id="stochasticContainer1" class="stochastic-container-box"></div>
+                <div id="mfiContainer1" class="mfi-container-box"></div>
+                <div id="adxContainer1" class="adx-container-box"></div>
+                <div id="obvContainer1" class="obv-container-box"></div>
+            </div>
+        </div>
+
+        <!-- Chart Analysis 2 -->
+        <div class="chart-analysis-panel" id="chartAnalysis2" role="tabpanel" aria-labelledby="tabChartAnalysis2">
+            <div class="charts-wrapper">
+                <div id="chartContainer2" class="chart-container chart-container-box"></div>
+                <div id="rsiContainer2" class="rsi-container-box"></div>
+                <div id="volumeDeltaContainer2" class="volume-delta-container-box"></div>
+                <div id="macdContainer2" class="macd-container-box"></div>
+                <div id="stochasticContainer2" class="stochastic-container-box"></div>
+                <div id="mfiContainer2" class="mfi-container-box"></div>
+                <div id="adxContainer2" class="adx-container-box"></div>
+                <div id="obvContainer2" class="obv-container-box"></div>
+            </div>
+        </div>
+
+        <!-- Chart Analysis 3 -->
+        <div class="chart-analysis-panel" id="chartAnalysis3" role="tabpanel" aria-labelledby="tabChartAnalysis3">
+            <div class="charts-wrapper">
+                <div id="chartContainer3" class="chart-container chart-container-box"></div>
+                <div id="rsiContainer3" class="rsi-container-box"></div>
+                <div id="volumeDeltaContainer3" class="volume-delta-container-box"></div>
+                <div id="macdContainer3" class="macd-container-box"></div>
+                <div id="stochasticContainer3" class="stochastic-container-box"></div>
+                <div id="mfiContainer3" class="mfi-container-box"></div>
+                <div id="adxContainer3" class="adx-container-box"></div>
+                <div id="obvContainer3" class="obv-container-box"></div>
+            </div>
+        </div>
+
+        <div class="status-bar" id="statusBar">
+            Status: Ready
+        </div>
+    </div>
+
+    <script src="/static/app.js"></script>
+    <script>
+        // Training Indicators toggle - purely additive, does not touch app.js or existing logic.
+        // Panel visibility is controlled with a CSS class so checkbox states inside it
+        // are never reset when the panel is hidden/shown.
+        (function () {
+            var trainingToggle = document.getElementById('chkTrainingIndicatorsToggle');
+            var trainingPanel = document.getElementById('trainingIndicatorsPanel');
+
+            if (trainingToggle && trainingPanel) {
+                trainingToggle.addEventListener('change', function () {
+                    trainingPanel.classList.toggle('open', trainingToggle.checked);
+                });
+            }
+
+            var indicatorsToggle = document.getElementById('chkIndicatorsToggle');
+            var indicatorsPanel = document.getElementById('indicatorsPanel');
+
+            if (indicatorsToggle && indicatorsPanel) {
+                indicatorsToggle.addEventListener('change', function () {
+                    indicatorsPanel.classList.toggle('open', indicatorsToggle.checked);
+                });
+            }
+        })();
+
+        // Chart Analysis 1 / 2 / 3 second-row tab navigation.
+        // Purely additive: switches which panel is visible via CSS classes,
+        // does not touch app.js, does not reload the page, and does not
+        // remove/reset any existing chart/indicator elements (Chart Analysis 1
+        // simply wraps the original charts-wrapper markup as-is).
+        (function () {
+            var tabs = document.querySelectorAll('.chart-analysis-tab');
+            var panels = document.querySelectorAll('.chart-analysis-panel');
+
+            tabs.forEach(function (tab) {
+                tab.addEventListener('click', function () {
+                    var targetId = tab.getAttribute('data-target');
+
+                    tabs.forEach(function (t) {
+                        var isActive = t === tab;
+                        t.classList.toggle('active', isActive);
+                        t.setAttribute('aria-selected', isActive ? 'true' : 'false');
+                    });
+
+                    panels.forEach(function (panel) {
+                        panel.classList.toggle('active', panel.id === targetId);
+                    });
+
+                    // If Lightweight Charts instances exist on window and expose a
+                    // resize/fit method, give them a chance to redraw when the
+                    // Chart Analysis 1 panel becomes visible again (charts can
+                    // render at 0 width if resized while hidden via display:none).
+                    if (targetId === 'chartAnalysis1' && typeof window.dispatchEvent === 'function') {
+                        window.dispatchEvent(new Event('resize'));
+                    }
+                });
+            });
+        })();
+    </script>
+</body>
+
+</html>
