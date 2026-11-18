@@ -18,7 +18,7 @@ will break for "GRU" until GRU is trimmed to match the same
 single-target interface.
 
 EMA9/EMA20 are computed directly here with the same formula used
-everywhere else in this codebase (df["close"].ewm(span=N,
+everywhere else in this codebase (df["close"].ewm(span=N,,
 adjust=False).mean()), rather than through either predictor's
 internal indicator machinery. Keeps this module decoupled from
 TCN-vs-GRU-specific internals and means it works even for a
